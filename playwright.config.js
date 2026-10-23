@@ -24,6 +24,8 @@ const config=({
     navigationTimeout : 30* 1000,
     browserName:'chromium',
     headless : false,
+    launchOptions:{args:['--start-maximized']},
+    viewport:null,
     screenshot:'on', //to take screenshot for every step
     //trace:'on'  //trace all the step
     trace:'retain-on-failure'  //it will only provoide failed test cases
