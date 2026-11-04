@@ -1,37 +1,34 @@
 // @ts-check
-import { defineConfig, devices } from '@playwright/test';
-import { trace } from 'node:console';
-
+const { defineConfig, devices } = require('@playwright/test');
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, 'Creds.env') });
 
 /**
  * @see https://playwright.dev/docs/test-configuration
  */
-const config=({
+const config = defineConfig({
   testDir: './tests',
-  testMatch:'**/*.spec.js',
-  retries:0,
-  
-  //Maximum time one test can run for - test  level timeout
-  timeout: 30 *1000,
-  expect :{
-    timeout:100000
+  testMatch: '**/*.spec.js',
+  retries: 0,
+
+  // Maximum time one test can run for - extended to 5 minutes for multi-filter validations
+  timeout: 300 * 1000,
+  expect: {
+    timeout: 15 * 1000
   },
 
-  reporter : 'html',
+  reporter: 'html',
   use: {
-    //action timeout set globally
-    actionTimeout:10* 5000,
-    navigationTimeout : 30* 1000,
-    browserName:'chromium',
-    headless : false,
-    launchOptions:{args:['--start-maximized']},
-    viewport:null,
-    screenshot:'on', //to take screenshot for every step
-    //trace:'on'  //trace all the step
-    trace:'retain-on-failure'  //it will only provoide failed test cases
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    
+    // Action and navigation timeouts
+    actionTimeout: 15 * 1000,
+    navigationTimeout: 60 * 1000,
+    browserName: 'chromium',
+    headless: false,
+    launchOptions: { args: ['--start-maximized'] },
+    viewport: null,
+    screenshot: 'on',
+    trace: 'retain-on-failure'
   },
 });
 
-module.exports=config
+module.exports = config;
