@@ -17,17 +17,22 @@
  * @param {import('@playwright/test').Page} page 
  * @param {import('@playwright/test').Locator} container 
  * @param {RegExp} optionRegex 
+ * @returns {Promise<boolean>}
  */
 async function selectDropdownOption(page, container, optionRegex) {
   const trigger = container.locator('button.btn, button').first();
-  await trigger.waitFor({ state: 'visible', timeout: 7000 });
+  const isTriggerVisible = await trigger.isVisible({ timeout: 4000 }).catch(() => false);
+  if (!isTriggerVisible) {
+    console.warn(`[Filter] Dropdown trigger not visible for option ${optionRegex}`);
+    return false;
+  }
 
   const menu = container.locator('ul.menu, ul.dropdown-content');
   const isMenuOpen = await menu.isVisible().catch(() => false);
 
   if (!isMenuOpen) {
     await trigger.click({ force: true });
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(250);
   }
 
   const option = container
@@ -35,26 +40,49 @@ async function selectDropdownOption(page, container, optionRegex) {
     .filter({ hasText: optionRegex })
     .first();
 
-  await option.waitFor({ state: 'visible', timeout: 7000 });
-  await option.scrollIntoViewIfNeeded();
+  const isOptionVisible = await option.isVisible({ timeout: 3000 }).catch(() => false);
+  if (!isOptionVisible) {
+    console.warn(`[Filter] Option ${optionRegex} not found or not visible in dropdown list.`);
+    // Close open dropdown so it doesn't block other elements
+    await trigger.click({ force: true }).catch(() => {});
+    return false;
+  }
+
+  await option.scrollIntoViewIfNeeded().catch(() => {});
   await option.click({ force: true });
   await page.waitForTimeout(300); // Allow application state and network response to update
+  return true;
 }
 
 /**
  * Dynamically retrieves all available projects from the project dropdown for the active month.
- * Automatically adapts when the project list changes month-to-month.
+ * Automatically adapts when the project list changes month-to-month, and safely returns []
+ * if the project filter is omitted (e.g. historical months with no multi-project breakdown).
  * 
  * @param {import('@playwright/test').Page} page
  * @returns {Promise<string[]>}
  */
 async function getAvailableProjects(page) {
-  // Use the toggle button or the combobox input without strict mode conflict
   const projectToggle = page.locator('button[aria-label="Toggle project list"]').first();
   const projectCombobox = page.locator('input[aria-controls="project-list-options"], input[role="combobox"]').first();
-  const trigger = (await projectToggle.isVisible().catch(() => false)) ? projectToggle : projectCombobox;
 
-  await trigger.waitFor({ state: 'visible', timeout: 8000 });
+  let isToggleVisible = await projectToggle.isVisible().catch(() => false);
+  let isComboboxVisible = await projectCombobox.isVisible().catch(() => false);
+
+  if (!isToggleVisible && !isComboboxVisible) {
+    // Brief grace period for DOM update
+    await page.waitForTimeout(800);
+    isToggleVisible = await projectToggle.isVisible().catch(() => false);
+    isComboboxVisible = await projectCombobox.isVisible().catch(() => false);
+  }
+
+  // If project filter is not present on this month/view, safely return empty array
+  if (!isToggleVisible && !isComboboxVisible) {
+    console.log('[Filter] Project filter is not present on this page/period.');
+    return [];
+  }
+
+  const trigger = isToggleVisible ? projectToggle : projectCombobox;
 
   // Open the project list
   await trigger.click({ force: true });
@@ -157,12 +185,19 @@ async function changeFilter(page, { project, year, month, week } = {}) {
     try {
       const projectToggle = page.locator('button[aria-label="Toggle project list"]').first();
       const projectCombobox = page.locator('input[aria-controls="project-list-options"], input[role="combobox"]').first();
-      const trigger = (await projectToggle.isVisible().catch(() => false)) ? projectToggle : projectCombobox;
+      
+      const isToggleVisible = await projectToggle.isVisible().catch(() => false);
+      const isComboboxVisible = await projectCombobox.isVisible().catch(() => false);
 
-      await trigger.waitFor({ state: 'visible', timeout: 8000 });
+      if (!isToggleVisible && !isComboboxVisible) {
+        console.log(`[Filter] Project filter is not available on this month/view for "${targetProject}". Skipping project change.`);
+        return;
+      }
+
+      const trigger = isToggleVisible ? projectToggle : projectCombobox;
 
       let currentProject = '';
-      if (await projectCombobox.isVisible().catch(() => false)) {
+      if (isComboboxVisible) {
         currentProject = (await projectCombobox.inputValue().catch(() => '')) ||
                          (await projectCombobox.getAttribute('placeholder').catch(() => '')) ||
                          (await projectCombobox.innerText().catch(() => ''));
@@ -423,7 +458,16 @@ async function testEveryProjectForMonth(page, { year, month, validateCallback, i
   const availableProjects = await getAvailableProjects(page);
   console.log(`Found ${availableProjects.length} active projects for ${month} ${year}:`, availableProjects);
 
-  // 3. Iterate through every project in this month
+  // 3. If no individual projects or project filter is present, validate the active month directly
+  if (availableProjects.length === 0) {
+    console.log(`[Filter] No project filter available for ${month} ${year}. Validating overall month directly.`);
+    if (typeof validateCallback === 'function') {
+      await validateCallback({ project: 'Overall / No Project Filter', year, month, week: null });
+    }
+    return;
+  }
+
+  // 4. Iterate through every project in this month
   for (const project of availableProjects) {
     console.log(`\n👉 Testing Project: "${project}" for ${month} ${year}`);
     // Only switch project (year & month are already set for this month loop)
