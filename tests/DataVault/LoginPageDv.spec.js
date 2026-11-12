@@ -1,5 +1,5 @@
 const { test } = require('@playwright/test');
-const { loginToDataVault, LoginPageDV } = require('../pageobjects/LoginPageDV');
+const { loginToDataVault, LoginPageDV } = require('../../pageobjects/LoginPageDV');
 
 test('Login to Data Vault application', async ({ page }) => {
     // Call the reusable login function directly

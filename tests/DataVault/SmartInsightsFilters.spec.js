@@ -10,7 +10,7 @@ const {
   get2024AvailableRange,
   testEveryProjectForMonth,
   changeFiltersProjectWise
-} = require('../pageobjects/FiltersDV');
+} = require('../../pageobjects/FiltersDV');
 
 // Run tests serially so all test cases share the same browser session without re-logging in
 test.describe.serial('Smart Insights - Dynamic Project & Month Validations', () => {
